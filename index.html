@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AI Teaching Bingo</title>
+<style>
+  :root{
+    --bg:#0b0f17; --card:#121829; --muted:#94a3b8; --accent:#e11d48; --accent2:#f87171;
+    --text:#e5e7eb; --win:#34d399; --mark:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    color:var(--text); background: radial-gradient(1200px 600px at 10% -10%, #1c2746 0%, transparent 60%),
+                       radial-gradient(900px 500px at 110% 10%, #10203a 0%, transparent 60%),
+                       var(--bg);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .app{width:min(1100px,100%); }
+  header{display:flex; gap:16px; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap}
+  h1{font-size:clamp(22px,3vw,30px); margin:0; font-weight:800; letter-spacing:.3px}
+  .sub{color:var(--muted); font-size:14px}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  button, .copy{
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#001018; border:none; padding:10px 14px; border-radius:14px; font-weight:700; cursor:pointer;
+    box-shadow: 0 6px 20px rgba(96,165,250,.25);
+  }
+  button.secondary,.copy{
+    background:#1c243c; color:var(--text); border:1px solid #223154; box-shadow:none;
+  }
+  button.ghost{
+    background:transparent; border:1px dashed #334155; color:var(--muted);
+  }
+  .stats{display:flex; gap:14px; align-items:center; color:var(--muted); font-size:14px}
+  .board{
+    background:rgba(255,255,255,.03); border:1px solid #223154; border-radius:18px; padding:14px;
+    display:grid; grid-template-columns:repeat(5,1fr); gap:10px;
+  }
+  .cell{
+    background:var(--card); border:1px solid #2a375c; border-radius:16px; padding:14px; min-height:120px;
+    display:flex; align-items:flex-start; justify-content:flex-start; position:relative; cursor:pointer;
+    transition:.18s transform ease, .18s box-shadow ease, .18s border-color ease;
+    box-shadow: 0 4px 10px rgba(0,0,0,.25);
+  }
+  .cell:hover{transform:translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.35)}
+  .cell.won{outline:3px solid var(--win); box-shadow: 0 0 0 4px rgba(52,211,153,.2), 0 10px 25px rgba(0,0,0,.45)}
+  .cell .label{font-size:15px; line-height:1.35; color:white}
+  .cell .check{
+    position:absolute; right:10px; bottom:10px; width:28px; height:28px; border-radius:50%;
+    border:2px solid #334155; display:grid; place-items:center; font-weight:900; color:#0b1222;
+    background:#0b1222;
+  }
+  .cell.checked{border-color:#f59e0b}
+  .cell.checked .check{background:var(--mark); border-color:#b45309}
+  .cell.checked .label{text-decoration:line-through; text-decoration-thickness:2px}
+  footer{display:flex; justify-content:space-between; align-items:center; margin-top:12px; color:var(--muted); gap:12px; flex-wrap:wrap}
+  .progress-bar{height:10px; background:#1b2338; border-radius:999px; overflow:hidden; width:220px; border:1px solid #263458}
+  .progress{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .25s ease}
+  .legend{font-size:13px}
+  .small{font-size:12px}
+  @media (max-width:720px){
+    .cell{min-height:100px; padding:12px}
+    .board{gap:8px}
+  }
+  /* confetti canvas overlays the app */
+  #fx{position:fixed; inset:0; pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div class="app">
+  <header>
+    <div>
+      <h1>AI Teaching Bingo</h1>
+      <div class="sub">Read the card and mark everything that matches your experience. Get four in a row ➜ <b>Bingo!</b></div>
+    </div>
+    <div class="controls">
+      <button id="shuffleBtn" class="secondary" title="카드를 섞어요">Shuffle</button>
+      <button id="clearBtn" class="ghost" title="모두 해제">Reset</button>
+      <button id="shareBtn" class="" title="현재 상태를 공유하는 링크를 만듭니다">Share Link</button>
+      <button id="bingoBtn" class="secondary" title="빙고 라인 보기">Show Lines</button>
+    </div>
+  </header>
+
+  <div id="board" class="board" aria-label="Bingo board"></div>
+
+  <footer>
+    <div class="stats">
+      <div class="progress-bar" aria-label="progress">
+        <div id="progress" class="progress"></div>
+      </div>
+      <span id="count">0/25 marked</span>
+      <span>•</span>
+      <span id="bingos">0 bingo</span>
+    </div>
+    
+  </footer>
+</div>
+
+<script>
+/* ======= Data ======= */
+const ITEMS = [
+  "Used AI to create quiz questions",
+  "Asked AI to simplify a complex topic",
+  "Got a funny or wrong answer from AI",
+  "Used AI to draft a course syllabus",
+  "Wondered if a student used AI",
+
+  "Asked AI to make an example problem",
+  "Used AI to generate an image for slides",
+  "Used AI to draft an email to students",
+  "Discussed AI ethics with students",
+  "Used AI to polish lecture slides",
+
+  "AI suggested a great discussion question",
+  "A student asked: “Do you also use AI, professor?”",
+  "Tried AI for grading guidelines",
+  "Used AI to summarize student feedback",
+  "Tried AI voice for class material",
+
+  "Brainstormed teaching ideas with AI",
+  "Used AI to translate teaching materials",
+  "AI gave an answer that surprised you",
+  "Tried AI for class activity ideas",
+  "“Without AI, prep would have taken longer”",
+
+  "Used AI to write learning objectives",
+  "Shared an AI-generated meme in class",
+  "AI gave a wrong citation/reference",
+  "Used AI to summarize a reading",
+  "Tried AI to design group activity"
+];
+
+/* ======= Helpers ======= */
+const $ = s => document.querySelector(s);
+const boardEl = $('#board');
+const progressEl = $('#progress');
+const countEl = $('#count');
+const bingosEl = $('#bingos');
+const FX = document.getElementById('fx');
+const ctx = FX.getContext('2d');
+
+function setCanvasSize(){
+  FX.width = innerWidth; FX.height = innerHeight;
+}
+addEventListener('resize', setCanvasSize); setCanvasSize();
+
+/* URL state (base64) */
+function encodeState(state){ return btoa(JSON.stringify(state)); }
+function decodeState(s){ try{ return JSON.parse(atob(s)); }catch{ return null; } }
+
+/* Shuffle (Fisher–Yates) */
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+/* ======= Game State ======= */
+let items = ITEMS.slice();
+let checked = Array(25).fill(false);
+let showLines = false;
+
+/* restore from URL hash if present */
+(function restoreFromURL(){
+  const hash = location.hash.replace(/^#/, '');
+  if(!hash) return;
+  const st = decodeState(hash);
+  if(st && Array.isArray(st.items) && Array.isArray(st.checked) && st.items.length===25 && st.checked.length===25){
+    items = st.items; checked = st.checked;
+  }
+})();
+
+/* ======= Rendering ======= */
+function render(){
+  boardEl.innerHTML = '';
+  items.forEach((text, idx)=>{
+    const cell = document.createElement('button');
+    cell.className = 'cell' + (checked[idx] ? ' checked' : '');
+    cell.setAttribute('data-idx', idx);
+    cell.setAttribute('aria-pressed', checked[idx] ? 'true' : 'false');
+    cell.innerHTML = `
+      <div class="label">${text}</div>
+      <div class="check">${checked[idx] ? '✓' : ''}</div>
+    `;
+    cell.addEventListener('click', ()=>toggle(idx));
+    boardEl.appendChild(cell);
+  });
+  paintWins();
+  updateStats();
+}
+
+function toggle(i){
+  checked[i] = !checked[i];
+  render();
+  const wins = getWins().length;
+  if(checked[i] && wins>0) confetti();
+  persist();
+}
+
+function persist(){
+  localStorage.setItem('ai-bingo-state', JSON.stringify({items, checked}));
+}
+
+(function restoreFromLocal(){
+  if(location.hash) return; // prefer shared link if present
+  const raw = localStorage.getItem('ai-bingo-state');
+  if(!raw) return;
+  try{
+    const st = JSON.parse(raw);
+    if(st && st.items?.length===25 && st.checked?.length===25){
+      items = st.items; checked = st.checked;
+    }
+  }catch{}
+})();
+
+/* ======= Logic: bingo detection ======= */
+const lines = [];
+// rows
+for(let r=0;r<5;r++){ lines.push([0,1,2,3,4].map(c=>r*5+c)); }
+// cols
+for(let c=0;c<5;c++){ lines.push([0,1,2,3,4].map(r=>r*5+c)); }
+// diagonals
+lines.push([0,6,12,18,24]);
+lines.push([4,8,12,16,20]);
+
+function getWins(){
+  return lines.filter(line => line.every(i => checked[i]));
+}
+
+function paintWins(){
+  const wins = getWins();
+  const cells = [...document.querySelectorAll('.cell')];
+  cells.forEach(c=>c.classList.remove('won'));
+  if(!showLines && wins.length===0) return;
+  wins.forEach(line => line.forEach(i=>cells[i].classList.add('won')));
+}
+
+function updateStats(){
+  const marked = checked.filter(Boolean).length;
+  progressEl.style.width = (marked/25*100).toFixed(1)+'%';
+  countEl.textContent = `${marked}/25 marked`;
+  const w = getWins().length;
+  bingosEl.textContent = `${w} ${w===1?'bingo':'bingos'}`;
+}
+
+/* ======= Actions ======= */
+$('#shuffleBtn').addEventListener('click', ()=>{
+  // keep checked positions with their texts by shuffling pairs together
+  const pairs = items.map((t,i)=>({t, c:checked[i]}));
+  const sh = shuffle(pairs);
+  items = sh.map(p=>p.t);
+  checked = sh.map(p=>p.c);
+  render(); persist();
+});
+
+$('#clearBtn').addEventListener('click', ()=>{
+  checked = Array(25).fill(false);
+  render(); persist();
+});
+
+$('#shareBtn').addEventListener('click', async ()=>{
+  const url = location.origin + location.pathname + '#' + encodeState({items, checked});
+  try{
+    await navigator.clipboard.writeText(url);
+    toast('Link copied!');
+  }catch{
+    prompt('Copy this URL', url);
+  }
+});
+
+$('#bingoBtn').addEventListener('click', ()=>{
+  showLines = !showLines;
+  $('#bingoBtn').textContent = showLines ? 'Hide Lines' : 'Show Lines';
+  paintWins();
+});
+
+/* ======= Tiny toast ======= */
+function toast(msg){
+  const el = document.createElement('div');
+  el.textContent = msg;
+  Object.assign(el.style, {
+    position:'fixed', left:'50%', top:'24px', transform:'translateX(-50%)',
+    background:'#0b1222', color:'white', border:'1px solid #223154',
+    padding:'10px 14px', borderRadius:'12px', zIndex:9999, boxShadow:'0 8px 24px rgba(0,0,0,.35)'
+  });
+  document.body.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 1700);
+}
+
+/* ======= Confetti (lightweight) ======= */
+let confettiParts = [];
+function confetti(){
+  const n = 140;
+  for(let i=0;i<n;i++){
+    confettiParts.push({
+      x: FX.width/2, y: FX.height/3,
+      vx: (Math.random()*6-3), vy: (Math.random()*-6-2),
+      g: .12+Math.random()*.05, life: 120+Math.random()*40,
+      w: 6+Math.random()*6, h: 2+Math.random()*3,
+      rot: Math.random()*Math.PI, vr: Math.random()*.2-.1,
+      opa: 1
+    });
+  }
+}
+function step(){
+  ctx.clearRect(0,0,FX.width,FX.height);
+  confettiParts = confettiParts.filter(p=>p.life>0);
+  confettiParts.forEach(p=>{
+    p.life--; p.vy+=p.g; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr; p.opa=Math.max(0,p.life/160);
+    ctx.save();
+    ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+    const grad = ctx.createLinearGradient(-p.w,0,p.w,0);
+    grad.addColorStop(0,'#60a5fa'); grad.addColorStop(1,'#22d3ee');
+    ctx.fillStyle = grad; ctx.globalAlpha = p.opa;
+    ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+    ctx.restore();
+  });
+  requestAnimationFrame(step);
+}
+step();
+
+/* ======= Init ======= */
+render();
+</script>
+</body>
+</html>
