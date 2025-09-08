@@ -75,7 +75,7 @@
   <header>
     <div>
       <h1>AI Teaching Bingo</h1>
-      <div class="sub">Read the card and mark everything that matches your experience. Get four in a row ➜ <b>Bingo!</b></div>
+      <div class="sub">Read the card and mark everything that matches your experience. Get five in a row ➜ <b>Bingo!</b></div>
     </div>
     <div class="controls">
       <button id="shuffleBtn" class="secondary" title="카드를 섞어요">Shuffle</button>
@@ -264,15 +264,7 @@ $('#clearBtn').addEventListener('click', ()=>{
   render(); persist();
 });
 
-$('#shareBtn').addEventListener('click', async ()=>{
-  const url = location.origin + location.pathname + '#' + encodeState({items, checked});
-  try{
-    await navigator.clipboard.writeText(url);
-    toast('Link copied!');
-  }catch{
-    prompt('Copy this URL', url);
-  }
-});
+
 
 $('#bingoBtn').addEventListener('click', ()=>{
   showLines = !showLines;
